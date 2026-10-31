@@ -7,11 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.document import Document, DocumentChunk, ExtractedTable
 from app.schemas.document import DocumentResponse, DocumentDetailResponse, DocumentXRayResponse
+from app.services.ingestion import DocumentIngestionService
 
 router = APIRouter()
 
@@ -44,7 +46,13 @@ async def upload_document(
 
     file_size = file_path.stat().st_size
 
-    # Criar registro no banco
+    # Executar pipeline de Ingestão e Document Intelligence
+    try:
+        ingestion = await DocumentIngestionService.process_document(str(file_path))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Falha na extração do documento: {str(e)}")
+
+    # Criar registro principal do documento
     doc = Document(
         id=doc_id,
         workspace_id=workspace_id,
@@ -52,20 +60,42 @@ async def upload_document(
         file_path=str(file_path),
         file_size_bytes=file_size,
         mime_type=file.content_type or "application/pdf",
-        status="ready", # Em produção seria 'processing' acionando worker
-        page_count=1,
-        summary="Documento carregado no sistema e indexado para consulta e recriação.",
+        status="ready",
+        page_count=ingestion.page_count,
+        summary=ingestion.summary,
         meta_info={
-            "entities": {
-                "valores": ["R$ 15.000,00"],
-                "datas": ["2026-10-31"],
-                "tags": ["Contrato", "Tecnologia"]
-            },
-            "key_topics": ["Visão Geral", "Especificações Técnicas", "Condições Gerais"]
+            "entities": ingestion.entities,
+            "key_topics": ingestion.key_topics,
+            "tables_count": len(ingestion.tables)
         }
     )
-
     db.add(doc)
+
+    # Persistir tabelas detectadas
+    for tbl in ingestion.tables:
+        table_record = ExtractedTable(
+            id=str(uuid.uuid4()),
+            document_id=doc_id,
+            page_number=tbl["page_number"],
+            title=tbl.get("title", "Tabela Detectada"),
+            markdown_content=tbl["markdown_content"],
+            raw_data=tbl.get("raw_data", [])
+        )
+        db.add(table_record)
+
+    # Persistir chunks hierárquicos com bounding boxes
+    for chk in ingestion.chunks:
+        chunk_record = DocumentChunk(
+            id=str(uuid.uuid4()),
+            document_id=doc_id,
+            chunk_index=chk["chunk_index"],
+            page_number=chk["page_number"],
+            content=chk["content"],
+            context_header=chk.get("context_header"),
+            bounding_box=chk.get("bounding_box")
+        )
+        db.add(chunk_record)
+
     await db.commit()
     await db.refresh(doc)
 
@@ -90,7 +120,7 @@ async def get_document(
     document_id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Document).where(Document.id == document_id)
+    query = select(Document).options(selectinload(Document.tables)).where(Document.id == document_id)
     result = await db.execute(query)
     doc = result.scalar_one_or_none()
 
@@ -104,7 +134,7 @@ async def get_document_xray(
     document_id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Document).where(Document.id == document_id)
+    query = select(Document).options(selectinload(Document.tables)).where(Document.id == document_id)
     result = await db.execute(query)
     doc = result.scalar_one_or_none()
 
@@ -144,4 +174,3 @@ async def download_document_file(
         media_type=doc.mime_type,
         filename=doc.filename
     )
-
