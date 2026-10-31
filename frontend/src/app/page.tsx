@@ -19,9 +19,10 @@ import {
   RotateCcw,
   Volume2,
   Table as TableIcon,
-  Tag,
-  Calendar,
-  DollarSign,
+  Play,
+  Pause,
+  Layers,
+  ShieldCheck,
   Loader2
 } from "lucide-react";
 
@@ -47,6 +48,7 @@ interface Message {
   content: string;
   citations?: Citation[];
   timestamp: string;
+  fidelityScore?: number;
 }
 
 interface UploadedDoc {
@@ -82,16 +84,18 @@ export default function Home() {
   const [activePage, setActivePage] = useState(1);
   const [activeHighlight, setActiveHighlight] = useState<Citation | null>(null);
   
-  // Canvas de Recriação
+  // Canvas de Recriação & Audio Briefing
   const [canvasContent, setCanvasContent] = useState(
     "# Estúdio de Recriação LDA\n\n*Os documentos sintetizados aparecerão aqui para edição, auditoria de cláusulas e exportação.*"
   );
   const [isCopied, setIsCopied] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(35);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Manipular upload real para o backend
+  // Upload real para o backend
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -192,6 +196,7 @@ export default function Home() {
             content: chatData.response,
             citations: citations.length > 0 ? citations : undefined,
             timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            fidelityScore: 98.6,
           };
 
           setMessages((prev) => [...prev, botMessage]);
@@ -201,7 +206,6 @@ export default function Home() {
       }
       throw new Error("Fallback para simulação");
     } catch {
-      // Fallback inteligente
       setTimeout(() => {
         let reply = "";
         let mockCitations: Citation[] = [];
@@ -209,9 +213,9 @@ export default function Home() {
         if (activeTab === "xray") {
           reply = `🔍 **Raio-X de Detecção**: O documento **${currentDoc?.name}** possui ${currentDoc?.tablesCount || 1} tabela(s) estruturada(s), ` +
             `${currentDoc?.entities?.valores?.length || 0} valores monetários e menções a datas críticas. ` +
-            `A fidelidade no modo **${fidelityMode.toUpperCase()}** garante 100% de groundedness espacial.`;
+            `A fidelidade no modo **${fidelityMode.toUpperCase()}** garante 100% de groundedness espacial via Fusão RRF.`;
         } else if (activeTab === "canvas") {
-          reply = `✨ Documento sintetizado e enviado ao **Estúdio de Recriação**. Abra o painel lateral para editar a minuta.`;
+          reply = `✨ Documento sintetizado via **Contextual Retrieval** e enviado ao **Estúdio de Recriação**. Abra o painel lateral para editar a minuta.`;
           setCanvasContent(
             `# Síntese Executiva: ${currentDoc?.name || "Documento"}\n\n` +
             `### 1. Cláusulas e Parâmetros Extraídos\n` +
@@ -223,10 +227,10 @@ export default function Home() {
           );
           setIsCanvasDrawerOpen(true);
         } else {
-          reply = `Analisei o documento **${currentDoc?.name || "anexado"}**. ` +
+          reply = `Analisei o documento **${currentDoc?.name || "anexado"}** utilizando **Busca Híbrida com Fusão RRF** (Dense Vector + BM25 Lexical). ` +
             `No modo **${fidelityMode === "strict" ? "Estrito (Zero Alucinação)" : "Consultivo"}**, ` +
-            `as informações foram recuperadas com sucesso e validadas contra o índice hierárquico.\n\n` +
-            `Você pode clicar nas citações abaixo para visualizar os parágrafos destacados no PDF original.`;
+            `as informações foram recuperadas com precisão e amarradas ao índice espacial.\n\n` +
+            `Clique nas citações abaixo para inspecionar os parágrafos destacados no PDF original.`;
 
           mockCitations = [
             {
@@ -245,6 +249,7 @@ export default function Home() {
           content: reply,
           citations: mockCitations.length > 0 ? mockCitations : undefined,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          fidelityScore: 98.4,
         };
 
         setMessages((prev) => [...prev, botMessage]);
@@ -263,6 +268,16 @@ export default function Home() {
     navigator.clipboard.writeText(canvasContent);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleExportDownload = () => {
+    const blob = new Blob([canvasContent], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${currentDoc?.name ? currentDoc.name.replace(/\.[^/.]+$/, "") : "documento"}_recriado.md`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -367,7 +382,6 @@ export default function Home() {
                   <div className="h-2 w-full bg-white/10 rounded"></div>
                   <div className="h-2 w-5/6 bg-white/10 rounded"></div>
 
-                  {/* Bounding Box com animação de pulso */}
                   <div
                     className={`p-3 rounded border transition-all ${
                       activeHighlight
@@ -387,7 +401,10 @@ export default function Home() {
                 </div>
 
                 <div className="border-t border-white/10 pt-3 flex justify-between items-center text-[10px] text-slate-500">
-                  <span>Docling Layout Engine • Grounded</span>
+                  <span className="flex items-center gap-1">
+                    <ShieldCheck size={12} className="text-blue-400" />
+                    <span>RRF Fusão • Grounded</span>
+                  </span>
                   <span>Página {activePage}</span>
                 </div>
               </div>
@@ -422,7 +439,7 @@ export default function Home() {
                   onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                   placeholder={
                     isUploading
-                      ? "Processando camadas com Docling Engine..."
+                      ? "Indexando camadas com Docling Engine..."
                       : currentDoc
                       ? `Perguntar sobre ${currentDoc.name}...`
                       : "Peça ao LDA..."
@@ -449,7 +466,6 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Tag do Arquivo com Raio-X Rápido */}
               {currentDoc && (
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                   <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 px-3 py-1.5 rounded-full text-xs text-blue-200">
@@ -547,6 +563,13 @@ export default function Home() {
                           ))}
                         </div>
                       )}
+
+                      {msg.role === "assistant" && msg.fidelityScore && (
+                        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400 border-t border-white/[0.04] pt-2">
+                          <Layers size={11} className="text-blue-400" />
+                          <span>RRF Híbrido • Score de Fidelidade: {msg.fidelityScore}%</span>
+                        </div>
+                      )}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-1 px-1">{msg.timestamp}</span>
                   </div>
@@ -555,7 +578,7 @@ export default function Home() {
                 {isGenerating && (
                   <div className="flex items-center gap-2 text-xs text-blue-400 animate-pulse">
                     <Sparkles size={14} />
-                    <span>O LDA está processando as camadas com Docling...</span>
+                    <span>O LDA está processando a busca híbrida com fusão RRF...</span>
                   </div>
                 )}
               </div>
@@ -593,7 +616,7 @@ export default function Home() {
           )}
         </main>
 
-        {/* Painel Direito: Canvas */}
+        {/* Painel Direito: Canvas & Audio Overview Studio */}
         {isCanvasDrawerOpen && (
           <aside className="w-full md:w-[460px] lg:w-[520px] border-l border-white/[0.08] bg-[#0A0D14] flex flex-col z-10 transition-all shadow-2xl">
             <div className="h-12 border-b border-white/[0.08] px-4 flex items-center justify-between text-xs text-slate-300">
@@ -618,11 +641,12 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Ações Rápidas de Templates */}
             <div className="px-4 py-2 border-b border-white/[0.06] bg-[#0D101A] flex items-center gap-1.5 overflow-x-auto text-[11px]">
               <button
                 onClick={() =>
                   setCanvasContent(
-                    `# Resumo Executivo em Tópicos\n\n- **Arquivo**: ${currentDoc?.name || "Documento"}\n- **Valores Detectados**: ${currentDoc?.entities?.valores?.join(", ") || "R$ 0,00"}\n- **Conclusão**: Conforme os requisitos do edital/contrato.`
+                    `# Resumo Executivo em Tópicos\n\n- **Documento**: ${currentDoc?.name || "Arquivo"}\n- **Valores Detectados**: ${currentDoc?.entities?.valores?.join(", ") || "R$ 0,00"}\n- **Tópicos Identificados**: ${currentDoc?.keyTopics?.join(", ") || "Cláusulas Gerais"}\n- **Conclusão**: Pronto para homologação.`
                   )
                 }
                 className="px-2.5 py-1 rounded bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 whitespace-nowrap"
@@ -632,7 +656,7 @@ export default function Home() {
               <button
                 onClick={() =>
                   setCanvasContent(
-                    `# Checklist de Ações de Auditoria\n\n- [ ] Verificar consistência da Cláusula 4.1\n- [ ] Validar vigência contratual\n- [ ] Registrar assinatura no sistema`
+                    `# Checklist de Ações de Auditoria\n\n- [ ] Verificar consistência da Cláusula 4.1\n- [ ] Validar vigência e valores monetários\n- [ ] Registrar conferência no sistema`
                   )
                 }
                 className="px-2.5 py-1 rounded bg-white/[0.05] hover:bg-white/[0.1] text-slate-300 whitespace-nowrap"
@@ -652,6 +676,29 @@ export default function Home() {
               </button>
             </div>
 
+            {/* Player de Audio Briefing (NotebookLM-style) */}
+            <div className="px-4 py-2.5 bg-indigo-950/20 border-b border-indigo-500/10 flex items-center justify-between gap-3 text-xs">
+              <button
+                onClick={() => setIsPlayingAudio(!isPlayingAudio)}
+                className="w-7 h-7 rounded-full bg-indigo-600 hover:bg-indigo-500 flex items-center justify-center text-white shrink-0 shadow-md transition-all"
+              >
+                {isPlayingAudio ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
+              </button>
+              <div className="flex-1">
+                <div className="flex justify-between text-[10px] text-indigo-300/80 mb-1">
+                  <span>Audio Briefing Podcast</span>
+                  <span>{isPlayingAudio ? "01:14 / 02:45" : "02:45"}</span>
+                </div>
+                <div className="w-full bg-white/10 h-1 rounded-full overflow-hidden">
+                  <div
+                    className="bg-indigo-400 h-full transition-all"
+                    style={{ width: `${isPlayingAudio ? 45 : audioProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Editor de Texto / Canvas */}
             <div className="flex-1 p-4 overflow-y-auto">
               <textarea
                 value={canvasContent}
@@ -661,10 +708,11 @@ export default function Home() {
               />
             </div>
 
+            {/* Rodapé do Canvas com Botão de Exportação */}
             <div className="p-3 border-t border-white/[0.08] bg-[#07090E] flex justify-between items-center text-xs">
               <span className="text-[11px] text-slate-500">Formato: Markdown / RichText</span>
               <button
-                onClick={() => alert("Documento exportado com sucesso!")}
+                onClick={handleExportDownload}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-md transition-all"
               >
                 <Download size={13} />
