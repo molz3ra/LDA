@@ -48,7 +48,21 @@ class DocumentXRayResponse(BaseModel):
     page_count: int
     status: str
     summary: Optional[str] = None
-    entities: Dict[str, List[str]] = Field(default_factory=dict) # {"pessoas": [], "valores": [], "datas": []}
+    entities: Dict[str, List[str]] = Field(default_factory=dict)
     key_topics: List[str] = Field(default_factory=list)
     tables_count: int = 0
 
+
+class DocumentDiffRequest(BaseModel):
+    doc_a_id: str
+    doc_b_id: str
+
+
+class DocumentDiffResponse(BaseModel):
+    doc_a_name: str
+    doc_b_name: str
+    added_clauses_count: int
+    removed_clauses_count: int
+    modified_clauses_count: int
+    risk_alerts: List[str] = []
+    markdown_diff: str

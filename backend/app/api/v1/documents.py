@@ -12,8 +12,15 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.document import Document, DocumentChunk, ExtractedTable
-from app.schemas.document import DocumentResponse, DocumentDetailResponse, DocumentXRayResponse
+from app.schemas.document import (
+    DocumentResponse,
+    DocumentDetailResponse,
+    DocumentXRayResponse,
+    DocumentDiffRequest,
+    DocumentDiffResponse
+)
 from app.services.ingestion import DocumentIngestionService
+from app.services.diff_engine import SemanticDiffEngine
 
 router = APIRouter()
 
@@ -100,6 +107,31 @@ async def upload_document(
     await db.refresh(doc)
 
     return doc
+
+
+@router.post("/diff", response_model=DocumentDiffResponse)
+async def compare_documents_diff(
+    payload: DocumentDiffRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Executa Redline e Comparação Semântica entre dois documentos.
+    """
+    diff_result = await SemanticDiffEngine.compare_documents(
+        db=db,
+        doc_a_id=payload.doc_a_id,
+        doc_b_id=payload.doc_b_id
+    )
+
+    return DocumentDiffResponse(
+        doc_a_name=diff_result.doc_a_name,
+        doc_b_name=diff_result.doc_b_name,
+        added_clauses_count=len(diff_result.added_clauses),
+        removed_clauses_count=len(diff_result.removed_clauses),
+        modified_clauses_count=len(diff_result.modified_clauses),
+        risk_alerts=diff_result.risk_alerts,
+        markdown_diff=diff_result.markdown_diff
+    )
 
 
 @router.get("", response_model=List[DocumentResponse])
