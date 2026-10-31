@@ -106,6 +106,13 @@ npm run dev
 ```
 > Acesse a aplicação em: `http://localhost:3000`
 
+### 5. Deploy na Vercel (Frontend)
+O projeto está pré-configurado para a Vercel com [`vercel.json`](file:///c:/Users/SnyX/Desktop/aaaaa/vercel.json):
+1. Importe o repositório na dashboard da Vercel.
+2. Defina o **Root Directory** como `frontend` (ou utilize o arquivo `vercel.json` na raiz).
+3. Configure a variável de ambiente `NEXT_PUBLIC_API_URL` apontando para o backend FastAPI.
+4. Clique em **Deploy**.
+
 ---
 
 ## 🛡️ Licença

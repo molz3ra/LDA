@@ -39,3 +39,4 @@ async def get_system_metrics(db: AsyncSession = Depends(get_db)):
             }
         }
     }
+

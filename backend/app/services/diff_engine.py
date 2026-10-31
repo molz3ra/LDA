@@ -140,3 +140,4 @@ class SemanticDiffEngine:
             risk_alerts=risk_alerts,
             markdown_diff=markdown_diff
         )
+
