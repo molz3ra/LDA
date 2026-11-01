@@ -11,3 +11,4 @@ from app.main import app
 
 # Exporta app para o runner Serverless da Vercel
 __all__ = ["app"]
+
