@@ -1,5 +1,6 @@
 import os
 import uuid
+import secrets
 import shutil
 from pathlib import Path
 from typing import List, Optional
@@ -17,10 +18,13 @@ from app.schemas.document import (
     DocumentDetailResponse,
     DocumentXRayResponse,
     DocumentDiffRequest,
-    DocumentDiffResponse
+    DocumentDiffResponse,
+    DocumentRedactResponse,
+    DocumentShareResponse
 )
 from app.services.ingestion import DocumentIngestionService
 from app.services.diff_engine import SemanticDiffEngine
+from app.services.redaction import RedactionService
 
 router = APIRouter()
 
@@ -133,6 +137,62 @@ async def compare_documents_diff(
         modified_clauses_count=len(diff_result.modified_clauses),
         risk_alerts=diff_result.risk_alerts,
         markdown_diff=diff_result.markdown_diff
+    )
+
+
+@router.post("/{document_id}/redact", response_model=DocumentRedactResponse)
+async def redact_document_sensitive_data(
+    document_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Aplica redação LGPD (tarja preta ███) em dados sensíveis do documento.
+    """
+    query = select(Document).options(selectinload(Document.chunks)).where(Document.id == document_id)
+    res = await db.execute(query)
+    doc = res.scalar_one_or_none()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    full_text = "\n\n".join([c.content for c in doc.chunks]) if doc.chunks else (doc.summary or "")
+    redaction_result = RedactionService.redact_text(full_text)
+
+    return DocumentRedactResponse(
+        document_id=doc.id,
+        filename=doc.filename,
+        total_redactions=redaction_result["total_redactions"],
+        stats_by_category=redaction_result["stats_by_category"],
+        redacted_sample=redaction_result["redacted_text"][:800]
+    )
+
+
+@router.post("/{document_id}/share", response_model=DocumentShareResponse)
+async def create_public_share_link(
+    document_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Gera link público compartilhável (read-only) para o documento.
+    """
+    query = select(Document).where(Document.id == document_id)
+    res = await db.execute(query)
+    doc = res.scalar_one_or_none()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    if not doc.share_token:
+        doc.share_token = secrets.token_urlsafe(16)
+        await db.commit()
+        await db.refresh(doc)
+
+    return DocumentShareResponse(
+        document_id=doc.id,
+        filename=doc.filename,
+        share_token=doc.share_token,
+        share_url=f"/share/{doc.share_token}",
+        summary=doc.summary
     )
 
 

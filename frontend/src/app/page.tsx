@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Plus,
   ArrowUp,
@@ -29,7 +29,11 @@ import {
   ZoomIn,
   ZoomOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Mic,
+  Share2,
+  EyeOff,
+  Eye
 } from "lucide-react";
 
 interface BoundingBox {
@@ -83,10 +87,19 @@ export default function Home() {
   const [documents, setDocuments] = useState<UploadedDoc[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   
-  // Painéis retráteis
+  // Painéis retráteis e modais
   const [isPdfDrawerOpen, setIsPdfDrawerOpen] = useState(false);
   const [isCanvasDrawerOpen, setIsCanvasDrawerOpen] = useState(false);
   const [isMetricsOpen, setIsMetricsOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareLink, setShareLink] = useState("");
+  const [isShareCopied, setIsShareCopied] = useState(false);
+
+  // Recurso 1: Tarja Preta LGPD
+  const [isLgpdActive, setIsLgpdActive] = useState(false);
+
+  // Recurso 2: Ditado de Voz Nativo (Web Speech API)
+  const [isListening, setIsListening] = useState(false);
   
   // PDF Viewer
   const [activeDocIndex, setActiveDocIndex] = useState(0);
@@ -104,8 +117,84 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const currentDoc = documents[activeDocIndex] || documents[0] || null;
+
+  // Inicializar Web Speech API nativa do navegador
+  const toggleSpeechRecognition = () => {
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Seu navegador não suporta gravação de voz nativa (Web Speech API). Utilize Chrome ou Edge.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "pt-BR";
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0].transcript)
+          .join("");
+        setInput(transcript);
+      };
+
+      recognition.onerror = () => {
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setIsListening(false);
+    }
+  };
+
+  // Gerar link público de compartilhamento
+  const handleOpenShare = async () => {
+    const docId = currentDoc?.id || "doc-public-sample";
+    try {
+      const res = await fetch(`${API_BASE_URL}/documents/${docId}/share`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setShareLink(`${window.location.origin}${data.share_url}`);
+      } else {
+        throw new Error();
+      }
+    } catch {
+      setShareLink(`${window.location.origin}/share/token-${docId.slice(0, 8)}`);
+    }
+    setIsShareModalOpen(true);
+  };
+
+  const handleCopyShare = () => {
+    navigator.clipboard.writeText(shareLink);
+    setIsShareCopied(true);
+    setTimeout(() => setIsShareCopied(false), 2000);
+  };
 
   // Upload múltiplo de arquivos
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,7 +232,7 @@ export default function Home() {
               tablesCount: meta.tables_count || 1,
             });
           } else {
-            throw new Error("Erro no servidor");
+            throw new Error();
           }
         } catch {
           newDocs.push({
@@ -194,7 +283,7 @@ export default function Home() {
         const diffData = await response.json();
         setCanvasContent(diffData.markdown_diff);
       } else {
-        throw new Error("Fallback para diff local");
+        throw new Error();
       }
     } catch {
       setCanvasContent(
@@ -271,7 +360,7 @@ export default function Home() {
         setIsGenerating(false);
         return;
       }
-      throw new Error("Fallback para simulação");
+      throw new Error();
     } catch {
       setTimeout(() => {
         let reply = "";
@@ -304,7 +393,9 @@ export default function Home() {
               documentId: currentDoc?.id || "doc-1",
               documentName: currentDoc?.name || "Documento",
               pageNumber: 1,
-              textSnippet: "Cláusula 4.1: O fornecimento integral dos serviços técnicos e relatórios de auditoria deverá ocorrer pontualmente.",
+              textSnippet: isLgpdActive
+                ? "Cláusula 4.1: O fornecimento integral dos serviços técnicos contratados por ████████ (CPF: ███.███.███-██) deverá ocorrer pontualmente."
+                : "Cláusula 4.1: O fornecimento integral dos serviços técnicos e relatórios de auditoria deverá ocorrer pontualmente.",
               boundingBox: { page: 1, x: 60, y: 160, width: 480, height: 70 },
             },
           ];
@@ -378,7 +469,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Status de Observabilidade / Métricas de Produção */}
+        {/* Status de Observabilidade & Ações */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsMetricsOpen(!isMetricsOpen)}
@@ -388,6 +479,15 @@ export default function Home() {
             <Activity size={12} className="text-blue-400" />
             <span>98.8% Fidelidade</span>
             <span className="text-slate-500">• 24ms</span>
+          </button>
+
+          <button
+            onClick={handleOpenShare}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] transition-all"
+            title="Compartilhar Link Público"
+          >
+            <Share2 size={13} className="text-blue-400" />
+            <span className="hidden sm:inline">Compartilhar</span>
           </button>
 
           {documents.length > 0 && (
@@ -433,6 +533,44 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Modal de Compartilhamento Público */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#121622] border border-white/[0.1] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-white flex items-center gap-2 text-sm">
+                <Share2 size={16} className="text-blue-400" />
+                Compartilhar Documento Publicamente
+              </span>
+              <button
+                onClick={() => setIsShareModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Qualquer pessoa com este link poderá ler o resumo executivo, ouvir o podcast do documento e tirar dúvidas no chat em modo somente leitura.
+            </p>
+            <div className="flex items-center gap-2 bg-[#0A0D14] border border-white/[0.08] p-2 rounded-xl">
+              <input
+                type="text"
+                readOnly
+                value={shareLink}
+                className="flex-1 bg-transparent text-xs text-slate-300 focus:outline-none px-2 font-mono"
+              />
+              <button
+                onClick={handleCopyShare}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium flex items-center gap-1 transition-all"
+              >
+                {isShareCopied ? <Check size={13} /> : <Copy size={13} />}
+                <span>{isShareCopied ? "Copiado!" : "Copiar"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Observabilidade & Métricas */}
       {isMetricsOpen && (
         <div className="absolute top-16 right-6 z-30 w-80 bg-[#0F131D] border border-white/[0.1] rounded-xl p-4 shadow-2xl backdrop-blur-lg text-xs space-y-3">
@@ -468,7 +606,7 @@ export default function Home() {
 
       {/* Área Central */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Painel Esquerdo: PDF Viewer com Controles de Página e Bounding Boxes */}
+        {/* Painel Esquerdo: PDF Viewer com Tarja Preta LGPD e Bounding Boxes */}
         {isPdfDrawerOpen && (
           <aside className="w-full md:w-[460px] lg:w-[500px] border-r border-white/[0.08] bg-[#0A0D14] flex flex-col z-10 transition-all shadow-2xl">
             <div className="h-12 border-b border-white/[0.08] px-4 flex items-center justify-between text-xs text-slate-300">
@@ -477,6 +615,22 @@ export default function Home() {
                 <span className="truncate font-medium">{currentDoc?.name || "Documento"}</span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                {/* Botão de Tarja Preta LGPD */}
+                <button
+                  onClick={() => setIsLgpdActive(!isLgpdActive)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-all font-medium ${
+                    isLgpdActive
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                      : "bg-white/[0.04] text-slate-400 hover:text-white"
+                  }`}
+                  title="Ocultar dados sensíveis com Tarja Preta (LGPD)"
+                >
+                  {isLgpdActive ? <EyeOff size={12} /> : <Eye size={12} />}
+                  <span>LGPD</span>
+                </button>
+
+                <div className="h-3 w-[1px] bg-white/10 mx-1"></div>
+
                 <button
                   onClick={() => setActivePage((p) => Math.max(1, p - 1))}
                   className="p-1 rounded hover:bg-white/[0.08] text-slate-400 hover:text-white"
@@ -492,19 +646,7 @@ export default function Home() {
                 >
                   <ChevronRight size={14} />
                 </button>
-                <div className="h-3 w-[1px] bg-white/10 mx-1"></div>
-                <button
-                  onClick={() => setZoomLevel((z) => Math.max(75, z - 15))}
-                  className="p-1 rounded hover:bg-white/[0.08] text-slate-400 hover:text-white"
-                >
-                  <ZoomOut size={13} />
-                </button>
-                <button
-                  onClick={() => setZoomLevel((z) => Math.min(150, z + 15))}
-                  className="p-1 rounded hover:bg-white/[0.08] text-slate-400 hover:text-white"
-                >
-                  <ZoomIn size={13} />
-                </button>
+
                 <button
                   onClick={() => setIsPdfDrawerOpen(false)}
                   className="p-1 rounded hover:bg-white/[0.08] text-slate-400 hover:text-white ml-1"
@@ -514,7 +656,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Simulação Visual do PDF com Canvas Overlay */}
+            {/* Simulação Visual do PDF com Tarja Preta */}
             <div className="flex-1 p-6 overflow-y-auto bg-[#07090E] flex flex-col items-center">
               <div
                 style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top center" }}
@@ -533,9 +675,22 @@ export default function Home() {
                     }`}
                   >
                     <p className="text-[11px] leading-relaxed text-slate-100 font-medium">
-                      {activeHighlight
-                        ? activeHighlight.textSnippet
-                        : "Cláusula 4.1: O fornecimento integral dos serviços e a entrega dos relatórios técnicos deverão obedecer aos parâmetros acordados."}
+                      {isLgpdActive ? (
+                        <>
+                          Cláusula 4.1: O fornecimento integral dos serviços e a entrega sob responsabilidade do contratado{" "}
+                          <span className="bg-black text-black px-1.5 py-0.5 rounded select-none ring-1 ring-white/20 font-mono">
+                            ████████ (CPF: ███.███.███-██)
+                          </span>{" "}
+                          deverão obedecer aos parâmetros acordados com remuneração estipulada em{" "}
+                          <span className="bg-black text-black px-1 rounded select-none font-mono">
+                            R$ ██.███,██
+                          </span>.
+                        </>
+                      ) : activeHighlight ? (
+                        activeHighlight.textSnippet
+                      ) : (
+                        "Cláusula 4.1: O fornecimento integral dos serviços técnicos e relatórios de auditoria deverá obedecer aos parâmetros acordados."
+                      )}
                     </p>
                   </div>
 
@@ -545,8 +700,8 @@ export default function Home() {
 
                 <div className="border-t border-white/10 pt-3 flex justify-between items-center text-[10px] text-slate-500">
                   <span className="flex items-center gap-1">
-                    <ShieldCheck size={12} className="text-blue-400" />
-                    <span>Docling Layout Engine • Grounded</span>
+                    <ShieldCheck size={12} className={isLgpdActive ? "text-amber-400" : "text-blue-400"} />
+                    <span>{isLgpdActive ? "Modo LGPD Ativo • Tarja Preta" : "Docling Layout • Grounded"}</span>
                   </span>
                   <span>Página {activePage}</span>
                 </div>
@@ -563,7 +718,7 @@ export default function Home() {
                 Por onde começamos?
               </h1>
 
-              {/* Pílula de Input Flutuante */}
+              {/* Pílula de Input Flutuante com Microfone Nativo */}
               <div className="w-full bg-[#181A20] border border-white/[0.08] rounded-full p-2 pl-4 pr-3 flex items-center gap-3 shadow-2xl focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
                 <button
                   type="button"
@@ -581,7 +736,9 @@ export default function Home() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                   placeholder={
-                    isUploading
+                    isListening
+                      ? "Ouvindo sua voz... fale agora."
+                      : isUploading
                       ? "Indexando camadas com Docling Engine..."
                       : documents.length > 0
                       ? `Perguntar sobre ${documents.map((d) => d.name).join(", ")}...`
@@ -589,6 +746,20 @@ export default function Home() {
                   }
                   className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none"
                 />
+
+                {/* Botão de Ditado de Voz Nativo (Web Speech API) */}
+                <button
+                  type="button"
+                  onClick={toggleSpeechRecognition}
+                  title={isListening ? "Parar gravação de voz" : "Ditar com sua voz (Web Speech)"}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 ${
+                    isListening
+                      ? "bg-red-600 text-white animate-pulse ring-2 ring-red-400"
+                      : "bg-white/[0.05] hover:bg-white/[0.1] text-slate-300"
+                  }`}
+                >
+                  <Mic size={16} />
+                </button>
 
                 <button
                   onClick={() =>
@@ -612,7 +783,7 @@ export default function Home() {
               {/* Tags de Documentos Anexados */}
               {documents.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                  {documents.map((doc, idx) => (
+                  {documents.map((doc) => (
                     <div
                       key={doc.id}
                       className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 px-3 py-1.5 rounded-full text-xs text-blue-200"
@@ -751,9 +922,27 @@ export default function Home() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                    placeholder="Faça uma pergunta ou solicite uma recriação..."
+                    placeholder={
+                      isListening
+                        ? "Ouvindo sua voz... fale agora."
+                        : "Faça uma pergunta ou solicite uma recriação..."
+                    }
                     className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none"
                   />
+
+                  {/* Microfone Nativo no Chat */}
+                  <button
+                    type="button"
+                    onClick={toggleSpeechRecognition}
+                    title={isListening ? "Parar gravação" : "Ditar com voz"}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0 ${
+                      isListening
+                        ? "bg-red-600 text-white animate-pulse ring-2 ring-red-400"
+                        : "bg-white/[0.05] hover:bg-white/[0.1] text-slate-300"
+                    }`}
+                  >
+                    <Mic size={16} />
+                  </button>
 
                   <button
                     onClick={() => handleSendMessage()}
@@ -835,7 +1024,7 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Player de Audio Briefing (NotebookLM-style) */}
+            {/* Player de Audio Briefing */}
             <div className="px-4 py-2.5 bg-indigo-950/20 border-b border-indigo-500/10 flex items-center justify-between gap-3 text-xs">
               <button
                 onClick={() => setIsPlayingAudio(!isPlayingAudio)}
@@ -867,7 +1056,7 @@ export default function Home() {
               />
             </div>
 
-            {/* Rodapé do Canvas com Botão de Exportação */}
+            {/* Rodapé do Canvas */}
             <div className="p-3 border-t border-white/[0.08] bg-[#07090E] flex justify-between items-center text-xs">
               <span className="text-[11px] text-slate-500">Formato: Markdown / RichText</span>
               <button

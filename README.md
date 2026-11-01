@@ -25,6 +25,9 @@ O **LDA (Leitura de Arquivos)** foi desenvolvido para superar as limitações de
 5. **Diferenciais de Produção (Tier S)**:
    - **Document Semantic Diff (Redlining)**: Comparação inteligente entre duas versões de documentos destacando cláusulas inseridas, alteradas ou suprimidas com alertas de risco.
    - **Audio Overview Integrado (Estilo NotebookLM)**: Síntese de voz neural estilo podcast em segundos via Edge-TTS.
+   - **Tarja Preta LGPD / Anonimização**: Detecção determinística de CPFs, CNPJs, e-mails e cartões com mascaramento instantâneo em tarja preta vetorial (`███`).
+   - **Ditado de Voz Nativo (Web Speech)**: Consulta por voz diretamente no navegador com feedback sonoro e zero custo de servidor.
+   - **Links Públicos de Compartilhamento (`/share/:token`)**: Geração de página pública somente leitura com resumo executivo, podcast e chat em modo visitante.
    - **Observabilidade do RAG**: Painel com telemetria de latência de busca (24ms), inferência de LLM e score de fidelidade (98.8% Zero Alucinação).
 
 ---

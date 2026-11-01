@@ -30,6 +30,7 @@ class DocumentResponse(DocumentBase):
     status: str
     page_count: int
     summary: Optional[str] = None
+    share_token: Optional[str] = None
     meta_info: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
@@ -66,3 +67,20 @@ class DocumentDiffResponse(BaseModel):
     modified_clauses_count: int
     risk_alerts: List[str] = []
     markdown_diff: str
+
+
+class DocumentRedactResponse(BaseModel):
+    document_id: str
+    filename: str
+    total_redactions: int
+    stats_by_category: Dict[str, int]
+    redacted_sample: str
+
+
+class DocumentShareResponse(BaseModel):
+    document_id: str
+    filename: str
+    share_token: str
+    share_url: str
+    summary: Optional[str] = None
+

@@ -31,6 +31,7 @@ class Document(Base):
     
     page_count: Mapped[int] = mapped_column(Integer, default=0)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    share_token: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
     meta_info: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, default=dict) # entities, key_topics, stats
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
