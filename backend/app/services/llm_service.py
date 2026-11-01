@@ -22,9 +22,10 @@ class LLMService:
         query: str,
         context_chunks: List[str],
         doc_names: List[str],
-        fidelity_mode: str = "strict"
+        fidelity_mode: str = "strict",
+        override_api_key: Optional[str] = None
     ) -> Optional[str]:
-        api_key = settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
+        api_key = override_api_key or settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")
         if not api_key:
             return None
 
@@ -40,12 +41,13 @@ class LLMService:
             "4. Se a resposta não estiver nos trechos fornecidos, informe que a informação não foi localizada nos documentos indexados sem inventar dados."
         )
 
+        # Blindagem de custo: limita o tamanho do prompt e contexto enviado
         prompt_body = f"Documentos analisados: {docs_label}\n\n"
         prompt_body += "Trechos recuperados pelo RAG Híbrido (RRF k=60):\n"
-        for i, chk in enumerate(context_chunks, 1):
-            prompt_body += f"\n[Trecho {i}]:\n{chk}\n"
+        for i, chk in enumerate(context_chunks[:3], 1):
+            prompt_body += f"\n[Trecho {i}]:\n{chk[:900]}\n"
 
-        prompt_body += f"\nPergunta do usuário: {query}\n\nResposta fundamentada:"
+        prompt_body += f"\nPergunta do usuário: {query[:500]}\n\nResposta fundamentada:"
 
         payload = {
             "contents": [
@@ -62,7 +64,7 @@ class LLMService:
             },
             "generationConfig": {
                 "temperature": 0.2 if fidelity_mode == "strict" else 0.5,
-                "maxOutputTokens": 800
+                "maxOutputTokens": 500
             }
         }
 
@@ -82,3 +84,4 @@ class LLMService:
                     continue
 
         return None
+

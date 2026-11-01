@@ -1,9 +1,10 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
+from app.core.rate_limiter import demo_limiter
 from app.models.document import Document
 from app.schemas.chat import ChatMessageRequest, ChatMessageResponse, Citation
 from app.services.rag_engine import RAGEngine
@@ -15,8 +16,32 @@ router = APIRouter()
 @router.post("", response_model=ChatMessageResponse)
 async def send_chat_message(
     payload: ChatMessageRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
+    # Proteção de Portfólio: Rate limiting por IP com suporte a BYOK (Bring Your Own Key)
+    custom_api_key = request.headers.get("x-gemini-api-key")
+    client_ip = (
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or (request.client.host if request.client else "demo-visitor")
+    )
+
+    if not custom_api_key:
+        is_allowed, wait_seconds, current_count = demo_limiter.is_allowed(client_ip)
+        if not is_allowed:
+            wait_minutes = max(1, (wait_seconds + 59) // 60)
+            return ChatMessageResponse(
+                response=(
+                    f"⏳ **Limite de Demonstração do Portfólio Atingido**\n\n"
+                    f"Para proteger a cota da chave deste projeto de vitrine, cada visitante pode realizar "
+                    f"até **15 consultas a cada 30 minutos**.\n\n"
+                    f"- **Tempo restante de recarga**: ~{wait_minutes} minuto(s).\n"
+                    f"- **Para testar sem limites**: Você pode inserir sua própria chave Gemini API no botão de configurações no topo."
+                ),
+                citations=[],
+                fidelity_mode=payload.fidelity_mode,
+                tokens_used=0
+            )
     # Caso 1: Nenhum documento anexado ainda (ambiente zerado / início de sessão)
     if not payload.document_ids:
         lower_msg = payload.message.lower().strip()
@@ -98,7 +123,8 @@ async def send_chat_message(
                 query=payload.message,
                 context_chunks=context_texts,
                 doc_names=doc_names,
-                fidelity_mode=payload.fidelity_mode
+                fidelity_mode=payload.fidelity_mode,
+                override_api_key=custom_api_key
             )
             if ai_generated_answer:
                 reply = ai_generated_answer

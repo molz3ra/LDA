@@ -33,7 +33,8 @@ import {
   Mic,
   Share2,
   EyeOff,
-  Eye
+  Eye,
+  Key
 } from "lucide-react";
 
 interface BoundingBox {
@@ -94,6 +95,32 @@ export default function Home() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [shareLink, setShareLink] = useState("");
   const [isShareCopied, setIsShareCopied] = useState(false);
+
+  // Recurso de Proteção: Chave de API Personalizada (BYOK)
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [keyInput, setKeyInput] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("lda_gemini_api_key");
+      if (saved) {
+        setCustomApiKey(saved);
+        setKeyInput(saved);
+      }
+    }
+  }, []);
+
+  const handleSaveCustomKey = () => {
+    if (keyInput.trim()) {
+      localStorage.setItem("lda_gemini_api_key", keyInput.trim());
+      setCustomApiKey(keyInput.trim());
+    } else {
+      localStorage.removeItem("lda_gemini_api_key");
+      setCustomApiKey("");
+    }
+    setIsKeyModalOpen(false);
+  };
 
   // Recurso 1: Tarja Preta LGPD
   const [isLgpdActive, setIsLgpdActive] = useState(false);
@@ -327,9 +354,14 @@ export default function Home() {
 
     try {
       const docIds = documents.map((d) => d.id);
+      const reqHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (customApiKey) {
+        reqHeaders["x-gemini-api-key"] = customApiKey;
+      }
+
       const response = await fetch(`${API_BASE_URL}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: reqHeaders,
         body: JSON.stringify({
           message: textToSend,
           document_ids: docIds,
@@ -496,6 +528,15 @@ export default function Home() {
           </button>
 
           <button
+            onClick={() => setIsKeyModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] transition-all"
+            title="Chave de API Gemini (BYOK)"
+          >
+            <Key size={13} className={customApiKey ? "text-emerald-400" : "text-amber-400"} />
+            <span className="hidden md:inline">{customApiKey ? "Key Pessoal Ativa" : "Demo (15 msgs/30m)"}</span>
+          </button>
+
+          <button
             onClick={handleOpenShare}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] transition-all"
             title="Compartilhar Link Público"
@@ -579,6 +620,62 @@ export default function Home() {
               >
                 {isShareCopied ? <Check size={13} /> : <Copy size={13} />}
                 <span>{isShareCopied ? "Copiado!" : "Copiar"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Configuração de Chave de API (BYOK) */}
+      {isKeyModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#121622] border border-white/[0.1] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-white flex items-center gap-2 text-sm">
+                <Key size={16} className="text-amber-400" />
+                Chave de API Gemini (BYOK)
+              </span>
+              <button
+                onClick={() => setIsKeyModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Este projeto de portfólio inclui uma cota de demonstração gratuita com proteção de rate limit (15 perguntas a cada 30 min). Caso queira realizar testes intensivos ou sem limites, insira sua própria chave do Google Gemini abaixo.
+            </p>
+            <div className="space-y-2">
+              <input
+                type="password"
+                placeholder="Insira sua Gemini API Key (ex: AIzaSy...)"
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                className="w-full bg-[#0A0D14] border border-white/[0.1] p-2.5 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-mono"
+              />
+              <span className="text-[10px] text-slate-500 block">
+                Sua chave fica salva exclusivamente no LocalStorage do seu navegador e nunca é armazenada no servidor.
+              </span>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              {customApiKey && (
+                <button
+                  onClick={() => {
+                    setKeyInput("");
+                    localStorage.removeItem("lda_gemini_api_key");
+                    setCustomApiKey("");
+                    setIsKeyModalOpen(false);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs transition-all"
+                >
+                  Remover Chave
+                </button>
+              )}
+              <button
+                onClick={handleSaveCustomKey}
+                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-all"
+              >
+                Salvar Chave
               </button>
             </div>
           </div>
