@@ -77,7 +77,7 @@ interface UploadedDoc {
   pageCount?: number;
 }
 
-const API_BASE_URL = "http://localhost:8000/api/v1";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);

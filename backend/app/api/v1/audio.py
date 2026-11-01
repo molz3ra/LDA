@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 router = APIRouter()
 
-AUDIO_OUTPUT_DIR = Path("./storage/audio")
+AUDIO_OUTPUT_DIR = Path("/tmp/audio" if os.getenv("VERCEL") else "./storage/audio")
 AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 

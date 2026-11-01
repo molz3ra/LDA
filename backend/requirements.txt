@@ -10,6 +10,7 @@ python-dotenv>=1.0.1
 # Database & Vectors
 sqlalchemy[asyncio]>=2.0.35
 asyncpg>=0.29.0
+aiosqlite>=0.20.0
 alembic>=1.13.3
 pgvector>=0.3.5
 
