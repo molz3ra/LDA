@@ -40,8 +40,10 @@ async def upload_document(
             detail="Formato de arquivo não suportado. Envie arquivos PDF, TXT, MD ou DOCX."
         )
 
+    # Sanitização contra Path Traversal
+    raw_name = Path(file.filename).name
     doc_id = str(uuid.uuid4())
-    safe_filename = f"{doc_id}_{file.filename}"
+    safe_filename = f"{doc_id}_{raw_name}"
     file_path = UPLOAD_DIR / safe_filename
 
     # Gravar arquivo em disco
