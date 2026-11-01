@@ -366,7 +366,21 @@ export default function Home() {
         let reply = "";
         let mockCitations: Citation[] = [];
 
-        if (activeTab === "xray") {
+        if (documents.length === 0) {
+          const lowerText = textToSend.toLowerCase().trim();
+          const isGreeting = ["olá", "ola", "oi", "bom dia", "boa tarde", "boa noite", "hello", "hi", "começar", "ajuda"].some((g) => lowerText.includes(g));
+
+          reply = isGreeting
+            ? "Olá! 👋 Sou o assistente de inteligência documental do **LDA (Leitura de Arquivos)**.\n\n" +
+              "No momento, **nenhum documento está anexado**. Para iniciar uma análise com **RAG Híbrido, citações espaciais no PDF e extração de tabelas**, " +
+              "basta anexar um ou mais documentos (PDF, DOCX, TXT) no botão de clipe 📎 abaixo ou arrastá-los para a tela.\n\n" +
+              "Como posso te ajudar hoje?"
+            : `Entendido: *"${textToSend}"*\n\n` +
+              "⚠️ **Nenhum documento está anexado no momento.**\n" +
+              "Para que eu possa responder perguntas com citações verificadas e zero alucinação, " +
+              "por favor anexe o arquivo desejado no botão de clipe 📎 abaixo.";
+          mockCitations = [];
+        } else if (activeTab === "xray") {
           reply = `🔍 **Raio-X de Detecção**: O documento **${currentDoc?.name || "anexado"}** possui ${currentDoc?.tablesCount || 1} tabela(s) estruturada(s), ` +
             `${currentDoc?.entities?.valores?.length || 0} valores monetários e menções a datas críticas. ` +
             `A fidelidade no modo **${fidelityMode.toUpperCase()}** garante 100% de groundedness espacial via Fusão RRF.`;
@@ -394,8 +408,8 @@ export default function Home() {
               documentName: currentDoc?.name || "Documento",
               pageNumber: 1,
               textSnippet: isLgpdActive
-                ? "Cláusula 4.1: O fornecimento integral dos serviços técnicos contratados por ████████ (CPF: ███.███.███-██) deverá ocorrer pontualmente."
-                : "Cláusula 4.1: O fornecimento integral dos serviços técnicos e relatórios de auditoria deverá ocorrer pontualmente.",
+                ? `Trecho recuperado do documento ${currentDoc?.name || ""}: ████████ (dados sensíveis sob máscara de proteção LGPD).`
+                : `Trecho recuperado do documento ${currentDoc?.name || ""}: cláusulas e parâmetros identificados com índice contextual verificado.`,
               boundingBox: { page: 1, x: 60, y: 160, width: 480, height: 70 },
             },
           ];
