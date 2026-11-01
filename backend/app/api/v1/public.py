@@ -11,6 +11,8 @@ from app.services.rag_engine import RAGEngine
 router = APIRouter()
 
 
+import re
+
 @router.get("/share/{share_token}")
 async def get_public_shared_document(
     share_token: str,
@@ -19,6 +21,9 @@ async def get_public_shared_document(
     """
     Retorna os dados públicos do documento compartilhado por token.
     """
+    if not share_token or not re.match(r"^[a-zA-Z0-9_\-]+$", share_token) or len(share_token) < 8:
+        raise HTTPException(status_code=400, detail="Formato de token de compartilhamento inválido.")
+
     query = (
         select(Document)
         .options(selectinload(Document.tables))
@@ -78,3 +83,4 @@ async def public_chat_with_document(
         fidelity_mode="strict",
         tokens_used=120
     )
+

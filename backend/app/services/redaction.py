@@ -59,3 +59,4 @@ class RedactionService:
             "stats_by_category": stats,
             "masked_items": masked_items
         }
+

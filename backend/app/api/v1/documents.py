@@ -260,11 +260,18 @@ async def download_document_file(
     result = await db.execute(query)
     doc = result.scalar_one_or_none()
 
-    if not doc or not os.path.exists(doc.file_path):
-        raise HTTPException(status_code=404, detail="Arquivo físico não encontrado")
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    resolved_path = Path(doc.file_path).resolve()
+    upload_root = UPLOAD_DIR.resolve()
+
+    # Blindagem de segurança: confinamento estrito no diretório de uploads
+    if not resolved_path.is_relative_to(upload_root) or not resolved_path.exists():
+        raise HTTPException(status_code=404, detail="Arquivo físico não encontrado ou acesso não autorizado")
 
     return FileResponse(
-        path=doc.file_path,
+        path=str(resolved_path),
         media_type=doc.mime_type,
         filename=doc.filename
     )

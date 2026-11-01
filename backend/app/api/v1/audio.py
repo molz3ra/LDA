@@ -55,14 +55,22 @@ async def generate_audio_briefing(payload: AudioGenerateRequest):
     )
 
 
+import re
+
 @router.get("/{audio_id}/file")
 async def get_audio_file(audio_id: str):
-    file_path = AUDIO_OUTPUT_DIR / f"briefing_{audio_id}.mp3"
-    if not file_path.exists():
+    # Validação de segurança: apenas identificadores alfanuméricos/hífens permitidos contra path traversal
+    if not re.match(r"^[a-zA-Z0-9_\-]+$", audio_id):
+        raise HTTPException(status_code=400, detail="Identificador de áudio inválido.")
+
+    file_path = (AUDIO_OUTPUT_DIR / f"briefing_{audio_id}.mp3").resolve()
+    
+    # Garantir que o caminho resolvido permanece confinado ao diretório de áudio
+    if not file_path.is_relative_to(AUDIO_OUTPUT_DIR.resolve()) or not file_path.exists():
         raise HTTPException(status_code=404, detail="Arquivo de áudio não encontrado.")
 
     return FileResponse(
-        path=file_path,
+        path=str(file_path),
         media_type="audio/mpeg",
         filename=f"briefing_{audio_id}.mp3"
     )
