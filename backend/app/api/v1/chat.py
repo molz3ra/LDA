@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.models.document import Document
 from app.schemas.chat import ChatMessageRequest, ChatMessageResponse, Citation
 from app.services.rag_engine import RAGEngine
+from app.services.llm_service import LLMService
 
 router = APIRouter()
 
@@ -87,37 +88,55 @@ async def send_chat_message(
 
     doc_context = f" no documento **{doc_names[0]}**" if len(doc_names) == 1 else f" nos **{len(doc_names)} documentos anexados**"
     
-    # 4. Geração Contextual de Resposta
-    if intent == "synthesis_recreation":
-        reply = (
-            f"⚡ **Modo de Síntese e Recriação Ativado**:\n\n"
-            f"Processe os trechos recuperados{doc_context} através do motor de agregação. "
-            f"O conteúdo estruturado foi formatado e enviado ao **Estúdio de Recriação (Canvas)**.\n\n"
-            f"- **Tópicos mapeados**: Diretrizes operacionais e cláusulas críticas.\n"
-            f"- **Conformidade de Grounding**: 100% dos dados rastreados até a fonte.\n\n"
-            f"Abra o painel lateral à direita para visualizar, editar a minuta ou exportar."
-        )
-    elif payload.fidelity_mode == "strict":
-        if search_results:
-            reply = (
-                f"No modo **Estrito (Zero Alucinação)**, localizei os dados pertinentes{doc_context} "
-                f"utilizando **Busca Híbrida com Fusão RRF** (léxica + semântica).\n\n"
-                f"Cada ponto foi validado contra o índice contextual da folha. "
-                f"Clique nas citações espaciais abaixo para conferir o parágrafo realce a realce no visualizador de PDF."
+    # 4. Geração Contextual de Resposta (Gemini AI quando GEMINI_API_KEY estiver configurada)
+    reply: Optional[str] = None
+
+    if search_results:
+        context_texts = [res.chunk.content for res in search_results]
+        try:
+            ai_generated_answer = await LLMService.generate_rag_answer(
+                query=payload.message,
+                context_chunks=context_texts,
+                doc_names=doc_names,
+                fidelity_mode=payload.fidelity_mode
             )
+            if ai_generated_answer:
+                reply = ai_generated_answer
+        except Exception as e:
+            print(f"Aviso no fallback do LLM: {e}")
+
+    # Fallback estrutural determinístico caso a API do Gemini não esteja configurada ou atinja cota
+    if not reply:
+        if intent == "synthesis_recreation":
+            reply = (
+                f"⚡ **Modo de Síntese e Recriação Ativado**:\n\n"
+                f"Processe os trechos recuperados{doc_context} através do motor de agregação. "
+                f"O conteúdo estruturado foi formatado e enviado ao **Estúdio de Recriação (Canvas)**.\n\n"
+                f"- **Tópicos mapeados**: Diretrizes operacionais e cláusulas críticas.\n"
+                f"- **Conformidade de Grounding**: 100% dos dados rastreados até a fonte.\n\n"
+                f"Abra o painel lateral à direita para visualizar, editar a minuta ou exportar."
+            )
+        elif payload.fidelity_mode == "strict":
+            if search_results:
+                reply = (
+                    f"No modo **Estrito (Zero Alucinação)**, localizei os dados pertinentes{doc_context} "
+                    f"utilizando **Busca Híbrida com Fusão RRF** (léxica + semântica).\n\n"
+                    f"Cada ponto foi validado contra o índice contextual da folha. "
+                    f"Clique nas citações espaciais abaixo para conferir o parágrafo realce a realce no visualizador de PDF."
+                )
+            else:
+                reply = (
+                    f"Analisei{doc_context}, mas não encontrei menções específicas à sua consulta: *\"{payload.message}\"*.\n\n"
+                    f"No modo **Estrito (Zero Alucinação)**, não invento dados ausentes do texto original. "
+                    f"Tente reformular a pergunta ou verificar os termos nos documentos anexados."
+                )
         else:
             reply = (
-                f"Analisei{doc_context}, mas não encontrei menções específicas à sua consulta: *\"{payload.message}\"*.\n\n"
-                f"No modo **Estrito (Zero Alucinação)**, não invento dados ausentes do texto original. "
-                f"Tente reformular a pergunta ou verificar os termos nos documentos anexados."
+                f"No modo **Consultivo**, analisei{doc_context} combinando os trechos indexados "
+                f"com boas práticas de mercado.\n\n"
+                f"As condições estabelecidas foram validadas no índice hierárquico e você pode solicitar "
+                f"comparações ou ajustes no Estúdio de Recriação."
             )
-    else:
-        reply = (
-            f"No modo **Consultivo**, analisei{doc_context} combinando os trechos indexados "
-            f"com boas práticas de mercado.\n\n"
-            f"As condições estabelecidas foram validadas no índice hierárquico e você pode solicitar "
-            f"comparações ou ajustes no Estúdio de Recriação."
-        )
 
     return ChatMessageResponse(
         response=reply,
